@@ -5,72 +5,36 @@ import { useRouter } from 'next/navigation'
 import { documentTemplates, getDocumentTemplate } from '@/lib/documentTemplates'
 import { DocumentType } from '@/types/document'
 import DocumentPreview from '@/components/DocumentPreview'
-import { saveDraft, getDraftByType } from '@/lib/storage'
+// Removed draft storage - form will be clean after refresh
 
 export default function FormPage() {
   const router = useRouter()
   const [selectedType, setSelectedType] = useState<DocumentType | ''>('')
   const [formData, setFormData] = useState<Record<string, any>>({})
   const formRef = useRef<HTMLFormElement>(null)
-  const saveTimeoutRef = useRef<NodeJS.Timeout>()
-  const prevTypeRef = useRef<DocumentType | ''>('')
   
   const template = selectedType ? getDocumentTemplate(selectedType) : null
 
-  // Load draft when type changes
+  // Clear all sessionStorage when page loads to ensure clean form
   useEffect(() => {
-    if (prevTypeRef.current === selectedType) return
-    
-    prevTypeRef.current = selectedType
-    
+    if (typeof window !== 'undefined') {
+      // Clear all document-related sessionStorage items
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith('document_')) {
+          sessionStorage.removeItem(key)
+        }
+      })
+    }
+  }, [])
+
+  // Reset form data when type changes
+  useEffect(() => {
     if (!selectedType) {
       setFormData({})
       return
     }
-
-    const draft = getDraftByType(selectedType)
-    const initialData = draft ? draft.data : {}
-    setFormData(initialData)
-    
-    // Set form values after render
-    setTimeout(() => {
-      if (formRef.current) {
-        Object.keys(initialData).forEach(key => {
-          const input = formRef.current?.querySelector(`[name="${key}"]`) as HTMLInputElement | HTMLTextAreaElement
-          if (input) {
-            input.value = initialData[key] || ''
-          }
-        })
-      }
-    }, 0)
+    setFormData({})
   }, [selectedType])
-
-  // Auto-save with debounce
-  useEffect(() => {
-    if (!selectedType || Object.keys(formData).length === 0) return
-    
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-    }
-    
-    saveTimeoutRef.current = setTimeout(() => {
-      const hasData = Object.keys(formData).some(key => formData[key] !== undefined && formData[key] !== '' && formData[key] !== null)
-      
-      if (hasData) {
-        saveDraft({
-          type: selectedType as DocumentType,
-          data: formData,
-          createdAt: new Date().toISOString(),
-        })
-      }
-    }, 1500)
-    
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
-      }
-    }
-  }, [formData, selectedType])
 
   const handleInputChange = (fieldId: string, value: string) => {
     setFormData(prev => ({
@@ -103,13 +67,10 @@ export default function FormPage() {
       return
     }
     
-    // Save final draft
-    console.log('Saving draft with data:', formDataObj)
-    saveDraft({
-      type: selectedType as DocumentType,
-      data: formDataObj,
-      createdAt: new Date().toISOString(),
-    })
+    // Save data to sessionStorage temporarily for checkout/confirmation pages
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(`document_${selectedType}`, JSON.stringify(formDataObj))
+    }
 
     // Navigate to checkout
     router.push(`/checkout?type=${selectedType}`)

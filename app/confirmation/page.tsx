@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { getDocumentTemplate } from '@/lib/documentTemplates'
 import { DocumentType } from '@/types/document'
-import { getDraftByType } from '@/lib/storage'
+// Using sessionStorage instead of localStorage - data clears on tab close
 import { generatePDF } from '@/lib/pdfGenerator'
 import DocumentPreview from '@/components/DocumentPreview'
 
@@ -30,19 +30,27 @@ function ConfirmationContent() {
 
     setTemplate(docTemplate)
 
-    // Load draft data
-    const draft = getDraftByType(documentType)
-    if (draft && draft.data) {
-      console.log('Loaded draft data:', draft.data)
-      setDocumentData(draft.data)
-    } else {
-      console.log('No draft found for type:', documentType)
-      setDocumentData({})
+    // Load data from sessionStorage
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem(`document_${documentType}`);
+      if (stored) {
+        try {
+          const data = JSON.parse(stored);
+          console.log('Loaded document data:', data);
+          setDocumentData(data);
+        } catch (e) {
+          console.error('Error parsing stored data:', e);
+          setDocumentData({});
+        }
+      } else {
+        console.log('No stored data found for type:', documentType);
+        setDocumentData({});
+      }
     }
   }, [documentType, router])
 
   const handleDownload = async () => {
-    if (!template || isDownloading) return
+    if (!template || isDownloading || !documentType) return
     
     try {
       setIsDownloading(true)
@@ -51,6 +59,11 @@ function ConfirmationContent() {
       console.log('Document content:', documentContent)
       const filename = `${template.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
       await generatePDF(documentContent, filename)
+      
+      // Clear sessionStorage after successful download
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(`document_${documentType}`)
+      }
     } finally {
       setIsDownloading(false)
     }
@@ -99,7 +112,7 @@ function ConfirmationContent() {
 
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
           <p className="text-blue-800">
-            💡 טיפ: שמור את המסמך במקום בטוח. המסמך נשמר גם ב-localStorage של הדפדפן שלך.
+            💡 טיפ: שמור את המסמך במקום בטוח לאחר ההורדה.
           </p>
         </div>
       </div>
